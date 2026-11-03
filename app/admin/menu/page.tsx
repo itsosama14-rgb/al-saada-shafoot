@@ -65,6 +65,14 @@ export default function MenuAdminPage(){
    catch(e){setError(e instanceof Error?e.message:"تعذر إضافة القسم");}
    finally{setBusy(false);}
  }
+ async function renameCategory(category:string){
+   const next=window.prompt("اكتب الاسم الجديد للقسم:",category)?.trim();
+   if(!next||next===category)return;
+   setBusy(true);setError("");setMessage("");
+   try{const data=await request("/api/admin/menu","PUT",{action:"rename-category",oldCategory:category,newCategory:next});setCategories(data.categories||[]);setItems(data.items||[]);if(draft.category===category)setDraft(old=>({...old,category:next}));setMessage("تم تغيير اسم القسم وتحديث أصنافه.");}
+   catch(e){setError(e instanceof Error?e.message:"تعذر تعديل القسم");}
+   finally{setBusy(false);}
+ }
  async function deleteCategory(category:string){
    if(!window.confirm("حذف القسم "+category+"؟"))return;
    setBusy(true);setError("");setMessage("");
@@ -128,7 +136,7 @@ export default function MenuAdminPage(){
        <section style={css.panel}>
         <h2 style={{fontSize:18,margin:"0 0 12px"}}><Tags size={17} style={{verticalAlign:"middle"}}/> إدارة الأقسام</h2>
         <form onSubmit={addCategory} style={{display:"flex",gap:8}}><input style={{...css.input,flex:1,minWidth:0}} value={newCategory} onChange={e=>setNewCategory(e.target.value)} placeholder="اسم القسم الجديد" required maxLength={60}/><button style={css.primary} disabled={busy}><Plus size={15}/> إضافة</button></form>
-        <div style={{display:"flex",flexWrap:"wrap",gap:7,marginTop:13}}>{categories.map(c=><span key={c} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 9px",background:"#f2f5ef",borderRadius:8,fontSize:12}}>{c}<button title="حذف القسم" onClick={()=>deleteCategory(c)} style={{border:0,background:"transparent",color:"#a33b32",cursor:"pointer",padding:0,display:"grid"}}><X size={14}/></button></span>)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:7,marginTop:13}}>{categories.map(c=><span key={c} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 9px",background:"#f2f5ef",borderRadius:8,fontSize:12}}>{c}<button title="تعديل اسم القسم" onClick={()=>renameCategory(c)} style={{border:0,background:"transparent",color:"#34533b",cursor:"pointer",padding:0,display:"grid"}}><Pencil size={13}/></button><button title="حذف القسم" onClick={()=>deleteCategory(c)} style={{border:0,background:"transparent",color:"#a33b32",cursor:"pointer",padding:0,display:"grid"}}><X size={14}/></button></span>)}</div>
         <p style={{fontSize:10,color:"#8b9188",lineHeight:1.8,marginBottom:0}}>لا يمكن حذف قسم ما دام يحتوي على أصناف. غيّر أقسام هذه الأصناف أولاً.</p>
        </section>
       </div>
