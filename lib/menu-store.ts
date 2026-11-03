@@ -47,8 +47,9 @@ export async function saveMenu(items: MenuItem[]): Promise<void> {
 export async function getCategories(): Promise<string[]> {
   try {
     const value = await redisCommand<unknown>("GET", "menu:categories");
+    if (value === null || value === undefined) return defaultCategories;
     const saved = parseArray<string>(value, defaultCategories);
-    return [...new Set([...defaultCategories, ...saved])];
+    return [...new Set(saved)];
   } catch {
     return defaultCategories;
   }
