@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import { getOrder, listOrders, redisCommand, saveOrder, type StoredOrder } from "@/lib/orders-store";
 
 export const runtime = "nodejs";
+const menu = [
+  { id: 1, name: "وجبة شاورما عربي", price: 22 },
+  { id: 2, name: "ساندويش شاورما", price: 12 },
+  { id: 3, name: "وجبة بروستد", price: 28 },
+  { id: 4, name: "برغر لحم", price: 24 },
+  { id: 5, name: "بطاطا مقلية", price: 8 },
+  { id: 6, name: "مشروب غازي", price: 5 },
+];
 
 export async function POST(request: Request) {
-  if (!process.env.DATABASE_URL) return NextResponse.json({ error: "قاعدة البيانات غير مربوطة بعد. أضف DATABASE_URL في إعدادات البيئة." }, { status: 503 });
   try {
     const body = await request.json();
     const { name, phone, address, type, notes, items } = body;
@@ -14,38 +21,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "يرجى تحديد طريقة الاستلام والعنوان." }, { status: 400 });
     if (!Array.isArray(items) || items.length < 1 || items.length > 30)
       return NextResponse.json({ error: "السلة فارغة أو تحتوي على عناصر كثيرة." }, { status: 400 });
-    const sql = neon(process.env.DATABASE_URL);
-    const ids = items.map((i: { menuItemId: number }) => Number(i.menuItemId));
-    if (ids.some((id: number) => !Number.isInteger(id) || id < 1)) return NextResponse.json({ error: "عنصر غير صالح." }, { status: 400 });
-    const products = (await sql`SELECT id, name, price, is_available FROM menu_items WHERE id = ANY(${ids})`) as unknown as Array<{ id: number; name: string; price: number | string; is_available: boolean }>;
-    const normalized = items.map((i: {menuItemId:number;quantity:number}) => {
-      const product = products.find((p) => Number(p.id) === Number(i.menuItemId));
-      const quantity = Number(i.quantity);
-      if (!product) throw new Error(`المنتج رقم ${i.menuItemId} غير موجود في قاعدة البيانات. يرجى مزامنة قائمة الطعام.`);
-      if (!product.is_available) throw new Error(`المنتج ${product.name} غير متاح حالياً.`);
+    const normalized = items.map((item: { menuItemId: number; quantity: number }) => {
+      const product = menu.find(p => p.id === Number(item.menuItemId));
+      const quantity = Number(item.quantity);
+      if (!product) throw new Error("أحد المنتجات غير موجود في القائمة.");
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new Error("كمية أحد المنتجات غير صحيحة.");
-      return { id: product.id, name: product.name, price: Number(product.price), quantity };
+      return { id: product.id, name: product.name, price: product.price, quantity };
     });
-    const subtotal = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const reference = "SA-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).slice(2,6).toUpperCase();
-    const customer = await sql`INSERT INTO customers (name, phone) VALUES (${name.trim()}, ${phone.trim()}) RETURNING id`;
-    const order = await sql`INSERT INTO orders (reference, customer_id, customer_name, phone, order_type, delivery_address, notes, subtotal, delivery_fee, total) VALUES (${reference}, ${customer[0].id}, ${name.trim()}, ${phone.trim()}, ${type}, ${type === "delivery" ? address.trim() : null}, ${typeof notes === "string" ? notes.slice(0,500) : null}, ${subtotal}, 0, ${subtotal}) RETURNING id`;
-    for (const item of normalized) await sql`INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, line_total) VALUES (${order[0].id}, ${item.id}, ${item.name}, ${item.quantity}, ${item.price}, ${item.price * item.quantity})`;
-    return NextResponse.json({ reference, status: "new" }, { status: 201 });
+    const total = normalized.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const sequence = await redisCommand<number>("INCR", "orders:sequence");
+    const reference = "SA-" + String(sequence).padStart(5, "0");
+    const now = new Date().toISOString();
+    const order: StoredOrder = {
+      reference, name: name.trim(), phone: phone.trim(),
+      address: type === "delivery" ? address.trim() : "",
+      type, notes: typeof notes === "string" ? notes.slice(0, 500) : "",
+      items: normalized, total, status: "new", createdAt: now, updatedAt: now,
+    };
+    await saveOrder(order);
+    await redisCommand("LPUSH", "orders:index", reference);
+    return NextResponse.json({ reference, status: order.status }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "تعذر حفظ الطلب." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "تعذر حفظ الطلب." }, { status: 503 });
   }
 }
 
 export async function GET(request: Request) {
-  if (!process.env.DATABASE_URL) return NextResponse.json({ error: "قاعدة البيانات غير مربوطة." }, { status: 503 });
-  const { searchParams } = new URL(request.url);
-  const reference = searchParams.get("reference");
-  const phone = searchParams.get("phone");
-  if (!reference && !phone) return NextResponse.json({ error: "أدخل الرقم المرجعي أو الهاتف." }, { status: 400 });
-  const sql = neon(process.env.DATABASE_URL);
-  const rows = reference
-    ? await sql`SELECT reference, status, order_type, total, created_at FROM orders WHERE reference = ${reference.trim()} LIMIT 1`
-    : await sql`SELECT reference, status, order_type, total, created_at FROM orders WHERE phone = ${phone!.trim()} ORDER BY created_at DESC LIMIT 10`;
-  return NextResponse.json({ orders: rows });
+  try {
+    const params = new URL(request.url).searchParams;
+    const reference = params.get("reference")?.trim();
+    const phone = params.get("phone")?.trim();
+    if (!reference && !phone) return NextResponse.json({ error: "أدخل الرقم المرجعي أو الهاتف." }, { status: 400 });
+    if (reference) {
+      const order = await getOrder(reference);
+      if (!order) return NextResponse.json({ error: "لم نعثر على طلب بهذا الرقم." }, { status: 404 });
+      return NextResponse.json({ orders: [order] });
+    }
+    const orders = await listOrders();
+    return NextResponse.json({ orders: orders.filter(order => order.phone === phone).slice(0, 10) });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "تعذر البحث عن الطلب." }, { status: 503 });
+  }
 }
