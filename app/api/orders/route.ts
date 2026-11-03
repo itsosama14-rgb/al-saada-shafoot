@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (ids.some((id: number) => !Number.isInteger(id) || id < 1)) return NextResponse.json({ error: "عنصر غير صالح." }, { status: 400 });
     const products = (await sql`SELECT id, name, price, is_available FROM menu_items WHERE id = ANY(${ids})`) as unknown as Array<{ id: number; name: string; price: number | string; is_available: boolean }>;
     const normalized = items.map((i: {menuItemId:number;quantity:number}) => {
-      const product = products.find((p) => Number(p.id) === Number(i.menuItemId));
+      const product = products.find((p: { id: number; name: string; price: number | string; is_available: boolean }) => Number(p.id) === Number(i.menuItemId));
       const quantity = Number(i.quantity);
       if (!product || !product.is_available || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new Error("أحد المنتجات لم يعد متاحاً.");
       return { id: product.id, name: product.name, price: Number(product.price), quantity };
