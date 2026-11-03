@@ -17,7 +17,7 @@ export default function Home(){
  const [categories,setCategories]=useState<string[]>(["الشاورما","الوجبات","المقبلات","المشروبات"]);
  const [cart,setCart]=useState<Record<number,number>>({});
  const [category,setCategory]=useState("الكل");
- useEffect(()=>{let live=true;fetch("/api/menu",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()).then(d=>{if(live&&Array.isArray(d.items))setMenu(d.items);if(live&&Array.isArray(d.categories))setCategories(d.categories);}).catch(()=>{});return()=>{live=false;}},[]);
+ useEffect(()=>{let live=true;const refresh=()=>fetch("/api/menu",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()).then(d=>{if(live&&Array.isArray(d.items))setMenu(d.items);if(live&&Array.isArray(d.categories))setCategories(d.categories);}).catch(()=>{});refresh();const timer=setInterval(refresh,15000);return()=>{live=false;clearInterval(timer);}},[]);
  const [name,setName]=useState("");const [phone,setPhone]=useState("");const [address,setAddress]=useState("");const [type,setType]=useState("delivery");const [notes,setNotes]=useState("");
  const [track,setTrack]=useState("");const [trackResult,setTrackResult]=useState<any[]>([]);const [trackError,setTrackError]=useState("");const [tracking,setTracking]=useState(false);
  const [sent,setSent]=useState(false);const [reference,setReference]=useState("");const [submitting,setSubmitting]=useState(false);
