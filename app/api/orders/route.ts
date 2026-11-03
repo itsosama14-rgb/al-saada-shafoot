@@ -19,9 +19,11 @@ export async function POST(request: Request) {
     if (ids.some((id: number) => !Number.isInteger(id) || id < 1)) return NextResponse.json({ error: "عنصر غير صالح." }, { status: 400 });
     const products = (await sql`SELECT id, name, price, is_available FROM menu_items WHERE id = ANY(${ids})`) as unknown as Array<{ id: number; name: string; price: number | string; is_available: boolean }>;
     const normalized = items.map((i: {menuItemId:number;quantity:number}) => {
-      const product = products.find((p: { id: number; name: string; price: number | string; is_available: boolean }) => Number(p.id) === Number(i.menuItemId));
+      const product = products.find((p) => Number(p.id) === Number(i.menuItemId));
       const quantity = Number(i.quantity);
-      if (!product || !product.is_available || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new Error("أحد المنتجات لم يعد متاحاً.");
+      if (!product) throw new Error(`المنتج رقم ${i.menuItemId} غير موجود في قاعدة البيانات. يرجى مزامنة قائمة الطعام.`);
+      if (!product.is_available) throw new Error(`المنتج ${product.name} غير متاح حالياً.`);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new Error("كمية أحد المنتجات غير صحيحة.");
       return { id: product.id, name: product.name, price: Number(product.price), quantity };
     });
     const subtotal = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0);
