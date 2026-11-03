@@ -31,13 +31,8 @@ function parseArray<T>(value: unknown, fallback: T[]): T[] {
 }
 
 export async function getMenu(): Promise<MenuItem[]> {
-  try {
-    const value = await redisCommand<unknown>("GET", "menu:items");
-    return parseArray<MenuItem>(value, defaultMenu).filter(item => item && Number.isInteger(item.id));
-  } catch (error) {
-    // Redis is configured alongside order storage. Keep the storefront readable if it is temporarily unavailable.
-    return defaultMenu;
-  }
+  const value = await redisCommand<unknown>("GET", "menu:items");
+  return parseArray<MenuItem>(value, defaultMenu).filter(item => item && Number.isInteger(item.id));
 }
 
 export async function saveMenu(items: MenuItem[]): Promise<void> {
@@ -45,14 +40,10 @@ export async function saveMenu(items: MenuItem[]): Promise<void> {
 }
 
 export async function getCategories(): Promise<string[]> {
-  try {
-    const value = await redisCommand<unknown>("GET", "menu:categories");
-    if (value === null || value === undefined) return defaultCategories;
-    const saved = parseArray<string>(value, defaultCategories);
-    return [...new Set(saved)];
-  } catch {
-    return defaultCategories;
-  }
+  const value = await redisCommand<unknown>("GET", "menu:categories");
+  if (value === null || value === undefined) return defaultCategories;
+  const saved = parseArray<string>(value, defaultCategories);
+  return [...new Set(saved)];
 }
 
 export async function saveCategories(categories: string[]): Promise<void> {
