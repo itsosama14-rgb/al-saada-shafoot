@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
 import { getOrder, listOrders, redisCommand, saveOrder, type StoredOrder } from "@/lib/orders-store";
+import { getMenu } from "@/lib/menu-store";
 
 export const runtime = "nodejs";
-const menu = [
-  { id: 1, name: "وجبة شاورما عربي", price: 22 },
-  { id: 2, name: "ساندويش شاورما", price: 12 },
-  { id: 3, name: "وجبة بروستد", price: 28 },
-  { id: 4, name: "برغر لحم", price: 24 },
-  { id: 5, name: "بطاطا مقلية", price: 8 },
-  { id: 6, name: "مشروب غازي", price: 5 },
-];
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -21,8 +13,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "يرجى تحديد طريقة الاستلام والعنوان." }, { status: 400 });
     if (!Array.isArray(items) || items.length < 1 || items.length > 30)
       return NextResponse.json({ error: "السلة فارغة أو تحتوي على عناصر كثيرة." }, { status: 400 });
+    const menu = await getMenu();
     const normalized = items.map((item: { menuItemId: number; quantity: number }) => {
-      const product = menu.find(p => p.id === Number(item.menuItemId));
+      const product = menu.find(p => p.id === Number(item.menuItemId) && p.available !== false);
       const quantity = Number(item.quantity);
       if (!product) throw new Error("أحد المنتجات غير موجود في القائمة.");
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new Error("كمية أحد المنتجات غير صحيحة.");
