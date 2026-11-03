@@ -55,10 +55,10 @@ export async function GET(request: Request) {
     if (reference) {
       const order = await getOrder(reference);
       if (!order) return NextResponse.json({ error: "لم نعثر على طلب بهذا الرقم." }, { status: 404 });
-      return NextResponse.json({ orders: [order] });
+      return NextResponse.json({ orders: [{ reference: order.reference, status: order.status, type: order.type, total: order.total, items: order.items, updatedAt: order.updatedAt }] });
     }
     const orders = await listOrders();
-    return NextResponse.json({ orders: orders.filter(order => order.phone === phone).slice(0, 10) });
+    return NextResponse.json({ orders: orders.filter(order => order.phone === phone).slice(0, 10).map(order => ({ reference: order.reference, status: order.status, type: order.type, total: order.total, items: order.items, updatedAt: order.updatedAt })) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "تعذر البحث عن الطلب." }, { status: 503 });
   }
