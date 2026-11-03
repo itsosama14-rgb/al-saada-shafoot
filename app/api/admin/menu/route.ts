@@ -64,6 +64,18 @@ export async function PUT(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "كلمة المرور غير صحيحة." }, { status: 401 });
   try {
     const body = await request.json();
+    if (body?.action === "rename-category") {
+      const oldCategory = typeof body.oldCategory === "string" ? body.oldCategory.trim() : "";
+      const newCategory = typeof body.newCategory === "string" ? body.newCategory.trim() : "";
+      if (!oldCategory || !newCategory || newCategory.length > 60) return NextResponse.json({ error: "اسم القسم الجديد غير صحيح." }, { status: 400 });
+      const categories = await getCategories();
+      if (!categories.includes(oldCategory)) return NextResponse.json({ error: "القسم غير موجود." }, { status: 404 });
+      if (categories.includes(newCategory)) return NextResponse.json({ error: "يوجد قسم بهذا الاسم بالفعل." }, { status: 409 });
+      const items = await getMenu();
+      await saveMenu(items.map(item => item.category === oldCategory ? { ...item, category: newCategory } : item));
+      await saveCategories(categories.map(category => category === oldCategory ? newCategory : category));
+      return NextResponse.json({ categories: categories.map(category => category === oldCategory ? newCategory : category), items: items.map(item => item.category === oldCategory ? { ...item, category: newCategory } : item) });
+    }
     const id = Number(body?.id);
     if (!Number.isInteger(id)) return NextResponse.json({ error: "رقم الصنف غير صحيح." }, { status: 400 });
     const items = await getMenu();
